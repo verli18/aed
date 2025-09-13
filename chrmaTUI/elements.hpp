@@ -9,7 +9,7 @@ class Button : public element {
     
         void render(TUImanager& tui) override;
         void onHover(bool isHovered) override;
-        void onInteract(pressedKey key) override;
+    void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) override;
 };
 
 class ToggleButton : public element {
@@ -21,5 +21,18 @@ class ToggleButton : public element {
     
         void render(TUImanager& tui) override;
         void onHover(bool isHovered) override;
-        void onInteract(pressedKey key) override;
+    void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) override;
+};
+
+class InputBar : public element {
+public:
+    std::string text;
+    std::string label;
+
+    InputBar(const std::string& lbl, point pos, int w, int h);
+
+    void render(TUImanager& tui) override;
+    void onHover(bool isHovered) override;
+    void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) override;
+    bool capturesInput() override { return true; }
 };

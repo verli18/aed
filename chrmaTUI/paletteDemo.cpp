@@ -84,7 +84,5 @@ int main() {
 
     }
 
-    // Restore cursor and clear
-    std::cout << "\x1b[?25h\x1b[0m\x1b[2J\x1b[H" << std::flush;
     return 0;
 }
