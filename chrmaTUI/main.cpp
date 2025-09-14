@@ -37,8 +37,8 @@ int main() {
 
     bool continuePressed = false;
     Button openPopup("test popup", {3, 12}, 3, 3);
-    Button closePopup("Okay..?", {tui.cols/2 - 18, tui.rows/2 - 7 + 3}, 3, 3);
-    Button secondPopup("Nuh uh", {tui.cols/2 - 6, tui.rows/2 - 7 + 3}, 3, 3);
+    Button closePopup("Yes", {tui.cols/2 - 18, tui.rows/2 - 7 + 3}, 3, 3);
+    Button secondPopup("No", {tui.cols/2 - 6, tui.rows/2 - 7 + 3}, 3, 3);
 
     input1.setCaptureEndHandler(drawAfterCaptureEnd);
     // Apply palette using unified standardStyle
@@ -93,7 +93,7 @@ int main() {
 
         if (continuePressed) {
             popup.render(tui);
-            tui.drawString("Ooooh I'm an annoying pop-up~ :3", WARNING, WARNING_BACKGROUND, tui.cols/2 - 18, tui.rows/2 -9 + 3);
+            tui.drawString("I am a pop-up!", WARNING, WARNING_BACKGROUND, tui.cols/2 - 18, tui.rows/2 -9 + 3);
         }
         // Run deferred end-of-frame draws (e.g., capture-end handlers)
         tui.runEndOfFrame();
