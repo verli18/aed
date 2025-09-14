@@ -31,13 +31,20 @@ void getTerminalSize(int& rows, int& cols) {
 }
 
 void TUImanager::clearScreen(color col) {
-    // Move cursor to home position only; avoid full clear per frame to reduce flicker
+    // Move cursor to home position and clear the internal buffer to printable spaces
+    // using the provided background color. Then force an immediate render so the
+    // visible terminal is updated right away.
     std::cout << "\x1b[H";
-    for(int y = 0; y < rows; ++y) {
-        for(int x = 0; x < cols; ++x) {
-            screenBuffer[y][x] = {'\0', {0,0,0,0}, col, std::string()};
+    color fg = {0, 0, 0, 255};
+    for (int y = 0; y < rows; ++y) {
+        for (int x = 0; x < cols; ++x) {
+            // Use a printable space so render() emits a colored cell instead of skipping it
+            screenBuffer[y][x] = {' ', fg, col, std::string()};
         }
     }
+
+    // Force an immediate repaint so the cleared buffer is written to the terminal now.
+    //render();
 }
 
 pressedKey mapCharToKey(char c){
@@ -78,7 +85,7 @@ bool TUImanager::pollInput() {
             key = mapCharToKey(c);
         }
 
-    if (key == Q) return true;
+    if (key == Q && userState == NAVIGATING) return true;
 
         container* current = containerID;
         element* focusedElem = current ? current->getFocused() : nullptr;
@@ -95,15 +102,15 @@ bool TUImanager::pollInput() {
         } else if (userState == NAVIGATING) {
             if (key == UP || key == DOWN) {
                 if (current) current->navigate(key);
-            } else if (key == LEFT && current && current->left) {
+            } else if (key == LEFT && current && current->getLeftPointer()) {
                 current->getFocused()->notifyHover(*this, false); // Unhover old
-                containerID = current->left;
+                containerID = current->getLeftPointer();
                 containerID->tui = this;
                 containerID->focusedIndex = 0;
                 if(!containerID->elements.empty()) containerID->getFocused()->notifyHover(*this, true); // hover new
-            } else if (key == RIGHT && current && current->right) {
+            } else if (key == RIGHT && current && current->getRightPointer()) {
                 current->getFocused()->notifyHover(*this, false); // Unhover old
-                containerID = current->right;
+                containerID = current->getRightPointer();
                 containerID->tui = this;
                 containerID->focusedIndex = 0;
                 if(!containerID->elements.empty()) containerID->getFocused()->notifyHover(*this, true); // hover new
@@ -236,5 +243,159 @@ void TUImanager::drawString(const std::string& str, color fg, color bg, int x, i
         col += std::max(1, w);
         s += consumed;
         len -= consumed;
+    }
+}
+
+int TUImanager::measureColumns(const std::string& str) {
+    mbstate_t ps{};
+    const char* s = str.c_str();
+    size_t len = str.size();
+    int cols = 0;
+    while (len > 0) {
+        wchar_t wc;
+        size_t consumed = mbrtowc(&wc, s, len, &ps);
+        if (consumed == (size_t)-1 || consumed == (size_t)-2) {
+            // invalid/partial; count as 1 column and skip a byte
+            cols += 1;
+            consumed = 1;
+            memset(&ps, 0, sizeof(ps));
+        } else if (consumed == 0) {
+            break;
+        } else {
+            int w = wcwidth(wc);
+            if (w < 0) w = 1;
+            cols += std::max(1, w);
+        }
+        s += consumed;
+        len -= consumed;
+    }
+    return cols;
+}
+
+void TUImanager::drawBox(int x, int y, int width, int height, color borderFg, color borderBg, color fillBg) {
+    if (width < 2 || height < 2) return;
+    // Unicode rounded box pieces
+    const std::string tl = "╭";
+    const std::string tr = "╮";
+    const std::string bl = "╰";
+    const std::string br = "╯";
+    const std::string hor = "─";
+    const std::string ver = "│";
+
+    // Top row
+    drawString(tl, borderFg, borderBg, x, y);
+    for (int i = 1; i < width - 1; ++i) drawString(hor, borderFg, borderBg, x + i, y);
+    drawString(tr, borderFg, borderBg, x + width - 1, y);
+
+    // Middle rows
+    for (int row = 1; row < height - 1; ++row) {
+        drawString(ver, borderFg, borderBg, x, y + row);
+        // fill interior with spaces with fillBg
+        for (int col = 1; col < width - 1; ++col) {
+            drawCharacter({' ', borderFg, fillBg, std::string()}, x + col, y + row);
+        }
+        drawString(ver, borderFg, borderBg, x + width - 1, y + row);
+    }
+
+    // Bottom row
+    drawString(bl, borderFg, borderBg, x, y + height - 1);
+    for (int i = 1; i < width - 1; ++i) drawString(hor, borderFg, borderBg, x + i, y + height - 1);
+    drawString(br, borderFg, borderBg, x + width - 1, y + height - 1);
+}
+
+// Switch focused container and update hover visuals
+void TUImanager::focusContainer(container* target, int index) {
+    if (!target) return;
+    // Unhover current focused element and container
+    if (containerID) {
+        if (auto* curElem = containerID->getFocused()) {
+            curElem->notifyHover(*this, false);
+        }
+        containerID->setHovered(false);
+    }
+
+    // Switch
+    containerID = target;
+    containerID->tui = this;
+
+    // Set focus index and hover element
+    if (!containerID->elements.empty()) {
+        if (index < 0 || index >= static_cast<int>(containerID->elements.size())) {
+            index = 0;
+        }
+        containerID->focusedIndex = index;
+        containerID->getFocused()->notifyHover(*this, true);
+    } else {
+        containerID->focusedIndex = -1;
+    }
+    containerID->setHovered(true);
+}
+
+// container rendering moved out of header to avoid incomplete type usage
+void container::render(TUImanager& tui) {
+    color useBg = isHovered ? style.bgHi : style.bg;
+    color useFg = isHovered ? style.fgHi : style.fg;
+
+    tui.drawBox(position.x, position.y, size.x, size.y, useFg, useBg, useBg);
+    
+    for (element* el : elements) {
+        el->render(tui);
+    }
+
+    if(label != "") {
+        tui.drawString("{", useFg, useBg, position.x+1, position.y);
+        tui.drawString(label, useFg, useBg, position.x+2, position.y);
+        int labelCols = tui.measureColumns(label);
+        tui.drawString("}", useFg, useBg, position.x + 2 + labelCols, position.y);
+    }
+}
+
+// Implementation of container::navigate moved from header to here.
+void container::navigate(pressedKey dir) {
+    if (elements.empty()) return;
+    if (focusedIndex == -1) focusedIndex = 0;  // Start at first
+
+    auto moveWithin = [&](int delta){
+        int sz = static_cast<int>(elements.size());
+        int next = focusedIndex + delta;
+        if (next < 0 || next >= sz) {
+            return false; // overflow
+        }
+        focusedIndex = next;
+        updateFocus();
+        return true;
+    };
+
+    if (dir == UP) {
+        // try move up
+        if (!moveWithin(-1)) {
+            // overflow above
+            if (behaviourUp == WRAP) {
+                focusedIndex = static_cast<int>(elements.size()) - 1;
+                updateFocus();
+            } else if (behaviourUp == JUMP && up) {
+                // move focus to the up container
+                if (tui) elements[focusedIndex]->notifyHover(*tui, false);
+                tui->containerID = up;
+                up->tui = tui;
+                // put focus at last element of up container
+                up->focusedIndex = up->elements.empty() ? -1 : static_cast<int>(up->elements.size()) - 1;
+                if (up->focusedIndex != -1 && tui) up->getFocused()->notifyHover(*tui, true);
+            } // STOP does nothing
+        }
+    } else if (dir == DOWN) {
+        if (!moveWithin(1)) {
+            // overflow below
+            if (behaviourDown == WRAP) {
+                focusedIndex = 0;
+                updateFocus();
+            } else if (behaviourDown == JUMP && down) {
+                if (tui) elements[focusedIndex]->notifyHover(*tui, false);
+                tui->containerID = down;
+                down->tui = tui;
+                down->focusedIndex = down->elements.empty() ? -1 : 0;
+                if (down->focusedIndex != -1 && tui) down->getFocused()->notifyHover(*tui, true);
+            }
+        }
     }
 }

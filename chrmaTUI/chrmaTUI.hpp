@@ -31,6 +31,13 @@ typedef struct color{
     uint8_t a;
 } color;
 
+typedef struct standardStyle{
+    color fg;
+    color bg;
+    color fgHi;
+    color bgHi;
+} standardStyle;
+
 typedef struct characterSpace{
     char character;
     color colorForeground;
@@ -58,6 +65,12 @@ enum pressedKey{
     UNKNOWN
 };
 
+enum containerBehaviour{
+    WRAP,
+    STOP,
+    JUMP
+};
+
 class element{
     public:
 
@@ -67,6 +80,9 @@ class element{
         virtual void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) {}
         virtual void update() {}
         virtual bool capturesInput() { return false; }
+
+    // Unified styling setter for all elements
+    inline void setStyle(const standardStyle& s) { style = s; }
 
         // User-provided callbacks
         // Handlers receive the source element and the TUImanager for rendering
@@ -98,42 +114,68 @@ class element{
     
     protected:
         point position, size;
-        color fg, bg;
+    standardStyle style; // unified styling for normal and highlight states
         bool isHovered;
 };
 
 class container {
     public:
-        std::vector<element*> elements;
-        container* left = nullptr;
-        container* right = nullptr;
-        int focusedIndex = -1;
-    TUImanager* tui = nullptr; // set by owner so we can deliver it to callbacks
+        point position = {0,0};
+        point size = {10,5};
+        std::string label = "";
+        container(point pos, point sz, standardStyle st, std::string lbl)
+            : position(pos), size(sz), label(lbl), style(st) {}
+
+        TUImanager* tui = nullptr; // set by owner so we can deliver it to callbacks
     
+        std::vector<element*> elements;
+        int focusedIndex = 0;
+    
+
         void addElement(element* e) { elements.push_back(e); }
         void removeElement(size_t index) { elements.erase(elements.begin() + index); }
-    
-        // Navigate vertically within this container
-    void navigate(pressedKey dir) {
-            if (elements.empty()) return;
-            if (focusedIndex == -1) focusedIndex = 0;  // Start at first
-            if (dir == UP) focusedIndex = (focusedIndex - 1 + elements.size()) % elements.size();
-            else if (dir == DOWN) focusedIndex = (focusedIndex + 1) % elements.size();
-            updateFocus();
-        }
+
+        // Navigate vertically within this container (implemented in .cpp)
+        void navigate(pressedKey dir);
     
         // Get the focused element
         element* getFocused() {
             return (focusedIndex >= 0 && focusedIndex < elements.size()) ? elements[focusedIndex] : nullptr;
         }
 
-        void render(TUImanager& tui) {
-            for (element* el : elements) {
-                el->render(tui);
-            }
-        }
+        void render(TUImanager& tui);
     
+        void setContainerBehaviour(containerBehaviour upB, container* up, containerBehaviour downB, container* down) {
+            behaviourUp = upB;
+            behaviourDown = downB;
+            this->up = up;
+            this->down = down;
+        }
+
+        void setLeft(container* left) { this->left = left; }
+        void setRight(container* right) { this->right = right; }
+
+        void setStyle(standardStyle style) { this->style = style; }
+    // Visually mark container hovered/focused (affects render border colors)
+    inline void setHovered(bool h) { isHovered = h; }
+        container* getLeftPointer() { return left; }
+        container* getRightPointer() { return right; }
+        container* getUpPointer() { return up; }
+        container* getDownPointer() { return down; }
     private:
+
+        standardStyle style;
+        
+        container* left = nullptr;
+        container* right = nullptr;
+        container* up = nullptr;
+        container* down = nullptr;
+
+        containerBehaviour behaviourUp = STOP; //these gotta be private so dumbasses like me don't modify a variable while forgetting the other one
+        containerBehaviour behaviourDown = STOP;
+
+        bool isHovered = false;
+
         void updateFocus() {
             for (size_t i = 0; i < elements.size(); ++i) {
                 if (tui) {
@@ -153,6 +195,7 @@ pressedKey mapCharToKey(char c);
 class TUImanager{
 
     public:
+
     uint8_t userState;
     element* elementID;
     container* containerID;
@@ -160,14 +203,16 @@ class TUImanager{
     std::vector<std::vector<characterSpace>> screenBuffer;
     // End-of-frame callbacks to run after elements render and before final render()
     std::vector<std::function<void(TUImanager&)>> endOfFrameCallbacks;
+
     TUImanager(){
         enableRawMode();
         std::setbuf(stdout, nullptr);  // Disable stdio buffering
-    // Enable UTF-8 locale so mbrtowc/wcwidth work as expected
-    setlocale(LC_ALL, "");
+        // Enable UTF-8 locale so mbrtowc/wcwidth work as expected
+        setlocale(LC_ALL, "");
         getTerminalSize(rows, cols);
         screenBuffer.resize(rows, std::vector<characterSpace>(cols));
         std::cout << "[?25l" << std::flush;
+        userState = NAVIGATING;
     }
 
     ~TUImanager(){
@@ -192,6 +237,14 @@ class TUImanager{
     characterSpace getCharacter(int x, int y);
     void drawCharacter(characterSpace, int x, int y);
     void drawString(const std::string& str, color fg, color bg, int x, int y);
+    // Draw a rounded box using Unicode characters. x,y are top-left, width/height in character cells.
+    void drawBox(int x, int y, int width, int height, color borderFg, color borderBg, color fillBg);
+       
+    // Measure how many terminal columns a UTF-8 string will occupy
+    int measureColumns(const std::string& str);
+
+    // Focus management: switch active container and element focus safely
+    void focusContainer(container* target, int index = 0);
 };
 
 #endif // CHRMA_TUI_HPP

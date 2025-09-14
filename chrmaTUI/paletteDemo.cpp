@@ -57,7 +57,7 @@ int main() {
         }
 
         // 3) Centered title text with per-letter vertical oscillation and gradient fg
-        std::string title = "chrmaTUI <3 palette demo";
+        std::string title = "chrmaTUI palette demo";
         int baseY = rows / 2;
         int amplitude = std::max(1, rows / 30); // small oscillation relative to screen
         float speed = 2.0f;      // oscillation speed
