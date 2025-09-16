@@ -2,6 +2,7 @@
 #define CHRMA_TUI_HPP
 
 class TUImanager; // Forward declaration
+class container;   // Forward declaration for parent linkage in element
 
 #include <termios.h>
 #include <vector>
@@ -42,6 +43,7 @@ typedef struct characterSpace{
     char character;
     color colorForeground;
     color colorBackground;
+    int z = 0; // z-order for layering (higher draws over lower)
     // If non-empty, this contains the UTF-8 bytes to render for this cell.
     // If empty and character=='\0', the cell is a continuation/placeholder and nothing is printed.
     // If empty and character!='\0', the ASCII character is rendered.
@@ -59,9 +61,11 @@ enum pressedKey{
     DOWN,
     LEFT,
     RIGHT,
+    SHIFT_ENTER,
     Q,
     BACKSPACE,
     ENTER,
+    ESC,
     UNKNOWN
 };
 
@@ -73,16 +77,56 @@ enum containerBehaviour{
 
 class element{
     public:
+        // Generic layout for all elements: percent-based or absolute offsets with anchors
+        enum class AnchorX { Left, Center, Right };
+        enum class AnchorY { Top, Middle, Bottom };
+        struct LayoutSpec {
+            bool usePercentX = false;
+            bool usePercentY = false;
+            float percentX = 0.0f; // 0..100
+            float percentY = 0.0f; // 0..100
+            int offsetX = 0;
+            int offsetY = 0;
+            bool usePercentW = false;
+            bool usePercentH = false;
+            float percentW = 0.0f; // 0..100
+            float percentH = 0.0f; // 0..100
+            int minW = 0;
+            int minH = 0;
+            AnchorX anchorX = AnchorX::Left;
+            AnchorY anchorY = AnchorY::Top;
+            bool relativeToInterior = true; // true: inside container box; false: container outer
+        };
 
         virtual ~element() = default;
         virtual void render(TUImanager& tui) = 0;  // Pure virtual: must implement
         virtual void onHover(bool isHovered) = 0;
-        virtual void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) {}
+    virtual void onInteract(pressedKey /*key*/, char /*c*/, uint8_t& /*userState*/, TUImanager& /*tui*/) {}
         virtual void update() {}
         virtual bool capturesInput() { return false; }
+        virtual bool canBeFocused() const { return true; }
+
+    // Compute and apply percent/anchor-based layout for this frame
+    void applyLayoutForFrame(TUImanager& tui);
 
     // Unified styling setter for all elements
-    inline void setStyle(const standardStyle& s) { style = s; }
+    inline void setStyle(const standardStyle& s) { style = s; hasCustomStyle = true; }
+    inline bool hasStyle() const { return hasCustomStyle; }
+    inline void setParent(container* p) { parent = p; }
+    inline container* getParent() const { return parent; }
+
+        // Layout setters
+        inline void setPercentPosition(float px, float py) { layout.usePercentX = true; layout.usePercentY = true; layout.percentX = px; layout.percentY = py; }
+        inline void setPercentX(float px) { layout.usePercentX = true; layout.percentX = px; }
+        inline void setPercentY(float py) { layout.usePercentY = true; layout.percentY = py; }
+        inline void setOffsets(int ox, int oy) { layout.offsetX = ox; layout.offsetY = oy; }
+        inline void setPercentSize(float pw, float ph) { layout.usePercentW = true; layout.usePercentH = true; layout.percentW = pw; layout.percentH = ph; }
+        inline void setPercentW(float pw) { layout.usePercentW = true; layout.percentW = pw; }
+        inline void setPercentH(float ph) { layout.usePercentH = true; layout.percentH = ph; }
+        inline void setMinSize(int w, int h) { layout.minW = w; layout.minH = h; }
+        inline void setAnchors(AnchorX ax, AnchorY ay) { layout.anchorX = ax; layout.anchorY = ay; }
+        inline void setRelativeToInterior(bool v) { layout.relativeToInterior = v; }
+        inline const LayoutSpec& getLayout() const { return layout; }
 
         // User-provided callbacks
         // Handlers receive the source element and the TUImanager for rendering
@@ -111,10 +155,15 @@ class element{
         void notifyCaptureEnd(TUImanager& tui) {
             if (onCaptureEndHandler) onCaptureEndHandler(*this, tui);
         }
+
+        point renderPos; // Calculated absolute position for rendering.
     
     protected:
         point position, size;
     standardStyle style; // unified styling for normal and highlight states
+    container* parent = nullptr; // owning container for relative layout
+    bool hasCustomStyle = false; // whether user explicitly set a style
+    LayoutSpec layout; // generic layout for all elements
         bool isHovered;
 };
 
@@ -124,15 +173,25 @@ class container {
         point size = {10,5};
         std::string label = "";
         container(point pos, point sz, standardStyle st, std::string lbl)
-            : position(pos), size(sz), label(lbl), style(st) {}
+            : position(pos), size(sz), label(lbl), style(st), defaultElementStyle(st) {}
 
-        TUImanager* tui = nullptr; // set by owner so we can deliver it to callbacks
+    // Stacking order for this container (higher draws above lower)
+    inline void setZIndex(int z) { zIndex = z; }
+    inline int getZIndex() const { return zIndex; }
+
+    TUImanager* tui = nullptr; // set by owner so we can deliver it to callbacks
     
         std::vector<element*> elements;
         int focusedIndex = 0;
     
-
-        void addElement(element* e) { elements.push_back(e); }
+        void addElement(element* e) {
+            if (!e) return;
+            e->setParent(this);
+            if (inheritStyle && !e->hasStyle()) {
+                e->setStyle(defaultElementStyle);
+            }
+            elements.push_back(e);
+        }
         void removeElement(size_t index) { elements.erase(elements.begin() + index); }
 
         // Navigate vertically within this container (implemented in .cpp)
@@ -140,7 +199,7 @@ class container {
     
         // Get the focused element
         element* getFocused() {
-            return (focusedIndex >= 0 && focusedIndex < elements.size()) ? elements[focusedIndex] : nullptr;
+            return (focusedIndex >= 0 && focusedIndex < static_cast<int>(elements.size())) ? elements[focusedIndex] : nullptr;
         }
 
         void render(TUImanager& tui);
@@ -155,7 +214,11 @@ class container {
         void setLeft(container* left) { this->left = left; }
         void setRight(container* right) { this->right = right; }
 
-        void setStyle(standardStyle style) { this->style = style; }
+    void setStyle(standardStyle style) { this->style = style; }
+    void setDefaultElementStyle(const standardStyle& s) { defaultElementStyle = s; }
+    void setInheritStyle(bool enabled) { inheritStyle = enabled; }
+    // Expose style for read-only access (used by TUImanager for clearing/redrawing)
+    inline standardStyle getStyle() const { return style; }
     // Visually mark container hovered/focused (affects render border colors)
     inline void setHovered(bool h) { isHovered = h; }
         container* getLeftPointer() { return left; }
@@ -165,6 +228,9 @@ class container {
     private:
 
         standardStyle style;
+    int zIndex = 0;
+    standardStyle defaultElementStyle; // default for children if they don't override
+    bool inheritStyle = true; // apply defaultElementStyle on add
         
         container* left = nullptr;
         container* right = nullptr;
@@ -177,11 +243,12 @@ class container {
         bool isHovered = false;
 
         void updateFocus() {
-            for (size_t i = 0; i < elements.size(); ++i) {
+                for (size_t i = 0; i < elements.size(); ++i) {
+                bool shouldHover = (static_cast<int>(i) == focusedIndex) && elements[i]->canBeFocused();
                 if (tui) {
-                    elements[i]->notifyHover(*tui, i == focusedIndex);
+                    elements[i]->notifyHover(*tui, shouldHover);
                 } else {
-                    elements[i]->onHover(i == focusedIndex);
+                    elements[i]->onHover(shouldHover);
                 }
             }
         }
@@ -201,6 +268,9 @@ class TUImanager{
     container* containerID;
     int rows, cols;
     std::vector<std::vector<characterSpace>> screenBuffer;
+    std::vector<std::vector<uint8_t>> dirty; // dirty flags per cell
+    int currentZ = 0; // z for subsequent draw operations
+    size_t dirtyCount = 0; // total number of dirty cells
     // End-of-frame callbacks to run after elements render and before final render()
     std::vector<std::function<void(TUImanager&)>> endOfFrameCallbacks;
 
@@ -210,7 +280,9 @@ class TUImanager{
         // Enable UTF-8 locale so mbrtowc/wcwidth work as expected
         setlocale(LC_ALL, "");
         getTerminalSize(rows, cols);
-        screenBuffer.resize(rows, std::vector<characterSpace>(cols));
+    screenBuffer.resize(rows, std::vector<characterSpace>(cols));
+    dirty.assign(rows, std::vector<uint8_t>(cols, 1));
+        dirtyCount = static_cast<size_t>(rows) * static_cast<size_t>(cols);
         std::cout << "[?25l" << std::flush;
         userState = NAVIGATING;
     }
@@ -221,9 +293,13 @@ class TUImanager{
     }
 
     void clearScreen(color col);
+    // Clear a rectangular region of the internal buffer and mark cells dirty.
+    void clearRect(int x, int y, int width, int height, color bg);
     void render();
     // Polls input and updates internal state. Returns true if the app should close.
     bool pollInput();
+    // Block until input or timeout (ms). Returns true if input is ready, false on timeout.
+    bool waitForInput(int timeoutMs);
     // Backwards-compatible name (deprecated): calls pollInput().
     bool windowShouldClose();
     // Schedule a function to run at the end of the current frame, before render().
@@ -245,6 +321,11 @@ class TUImanager{
 
     // Focus management: switch active container and element focus safely
     void focusContainer(container* target, int index = 0);
+
+    // Z control helpers
+    inline void setCurrentZ(int z) { currentZ = z; }
+    inline int getCurrentZ() const { return currentZ; }
+    inline bool hasDirty() const { return dirtyCount > 0; }
 };
 
 #endif // CHRMA_TUI_HPP
