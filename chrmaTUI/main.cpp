@@ -56,10 +56,10 @@ int main() {
     slider1.setPercentW(80);
 
     Selector selector1("Theme", {"Dark", "Light", "Blue", "Green", "Purple"}, {0, 0}, 20, 3);
-    selector1.setPercentPosition(60, 15);
+    selector1.setPercentPosition(0, 0);
 
     DropdownMenu dropdown1("Language", {"English", "Spanish", "French", "German", "Portuguese", "Italian", "Japanese", "Chinese", "Korean", "Finnish", "Russian", "Arabic", "Turkish", "Vietnamese"}, {0, 0}, 25, 3, 7);
-    dropdown1.setPercentPosition(60, 35);
+    dropdown1.setPercentPosition(0, 50);
 
     Text pctLabel("20% x, 50% y", {0, 0});
     pctLabel.setPercentPosition(20, 50);
@@ -102,29 +102,44 @@ int main() {
     mainContainer.addElement(&button3);
     mainContainer.addElement(&input1);
     mainContainer.addElement(&slider1);
-    mainContainer.addElement(&selector1);
-    mainContainer.addElement(&dropdown1);
+
+    container selectorContainer({36, 3}, {20, 10}, {TEXT, BACKGROUND, TEXT_HIGHLIGHT, BACKGROUND}, "Selector");
+    selectorContainer.isHiddenContainer(true);
+    selectorContainer.setDefaultElementStyle({TEXT, BACKGROUND, TEXT_HIGHLIGHT, BACKGROUND});
+    selectorContainer.setInheritStyle(true);
+    selectorContainer.addElement(&selector1);
+    selectorContainer.addElement(&dropdown1);
     mainContainer.addElement(&openPopup);
     mainContainer.addElement(&multiLineLabel);
-
+    
     // Create a secondary container below the main one to host a MultiLineInput
     int secondHeight = 30;
     container bottomContainer({tui.cols/2, 0}, {tui.cols/2, tui.rows}, {TEXT, BACKGROUND, TEXT_HIGHLIGHT, BACKGROUND}, "Notes");
     bottomContainer.setDefaultElementStyle({TEXT, BACKGROUND, TEXT_HIGHLIGHT, BACKGROUND});
     bottomContainer.setInheritStyle(true);
 
-    // Add a MultiLineInput to the bottom container
-    MultiLineInput notes("Notes", {1,1}, 30, secondHeight - 2);
+    // Add a small radio-button group at the top of the bottom container
+    RadioButton rbLow("Low", "priority", {1,0}, 10, 1);
+    RadioButton rbMedium("Medium", "priority", {1,1}, 12, 1);
+    RadioButton rbHigh("High", "priority", {1,2}, 10, 1);
+    bottomContainer.addElement(&rbLow);
+    bottomContainer.addElement(&rbMedium);
+    bottomContainer.addElement(&rbHigh);
+
+    // Add a MultiLineInput to the bottom container (notes) below the radio buttons
+    MultiLineInput notes("Notes", {1,1}, 30, tui.rows - 6);
     notes.setRelativeToInterior(true);
-    // Make the notes fill the container interior
-    notes.setPercentPosition(0, 0);
+    // Make the notes fill the container interior below radio buttons
+    notes.setPercentPosition(0, 10);
     notes.setPercentW(100);
-    notes.setPercentH(100);
+    notes.setPercentH(88);
     bottomContainer.addElement(&notes);
 
     // Link navigation: from main down to bottom, and bottom up to main
-    mainContainer.setRight(&bottomContainer);
-    bottomContainer.setLeft(&mainContainer);
+    bottomContainer.setLeft(&selectorContainer);
+    selectorContainer.setLeft(&mainContainer);
+    mainContainer.setRight(&selectorContainer);
+    selectorContainer.setRight(&bottomContainer);
 
     // Ensure bottomContainer is rendered after main so it appears below
 
@@ -162,6 +177,7 @@ int main() {
         }
         // Render bottom notes container below main
         bottomContainer.render(tui);
+        selectorContainer.render(tui);
         tui.runEndOfFrame();
         if (tui.hasDirty()) {
             tui.render();
