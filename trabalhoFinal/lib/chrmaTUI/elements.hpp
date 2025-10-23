@@ -192,3 +192,61 @@ public:
     void onHover(bool hovered) override;
     void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) override;
 };
+
+// ListView: scrollable single-select list with keyboard navigation.
+// Similar to DropdownMenu but always expanded and more suitable for data display.
+class ListView : public element {
+public:
+    std::vector<std::string> items;
+    int selectedIndex;
+    std::string label;
+    int visibleRows; // Number of rows to display
+    int scrollOffset; // Current scroll position
+
+    ListView(const std::string& lbl, const std::vector<std::string>& itemList, point pos, int w, int h, int visibleRows = 10);
+
+    void render(TUImanager& tui) override;
+    void onHover(bool hovered) override;
+    void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) override;
+    bool capturesInput() override { return true; }
+    
+    std::string getSelectedItem() const;
+    int getSelectedIndex() const { return selectedIndex; }
+    
+    // Update items dynamically (useful for search/filter)
+    void setItems(const std::vector<std::string>& newItems);
+};
+
+// RichListItem: multi-line data with per-item theming
+struct RichListItem {
+    std::vector<std::string> lines;  // Multi-line content for this item
+    standardStyle theme;              // Custom colors for this item
+    
+    RichListItem(const std::vector<std::string>& lines, const standardStyle& theme)
+        : lines(lines), theme(theme) {}
+};
+
+// RichListView: scrollable list with multi-line items rendered as mini-containers.
+// Each item is drawn with a rounded box and can have custom theming.
+class RichListView : public element {
+public:
+    std::vector<RichListItem> items;
+    int selectedIndex;
+    std::string label;
+    int scrollOffset;
+    int itemHeight; // Height per item (including border)
+
+    RichListView(const std::string& lbl, const std::vector<RichListItem>& itemList, 
+                 point pos, int w, int h, int itemHeight = 5);
+
+    void render(TUImanager& tui) override;
+    void onHover(bool hovered) override;
+    void onInteract(pressedKey key, char c, uint8_t& userState, TUImanager& tui) override;
+    bool capturesInput() override { return true; }
+    
+    int getSelectedIndex() const { return selectedIndex; }
+    const RichListItem* getSelectedItem() const;
+    
+    // Update items dynamically
+    void setItems(const std::vector<RichListItem>& newItems);
+};

@@ -202,19 +202,24 @@ bool TUImanager::pollInput() {
             }
         } else if (userState == NAVIGATING) {
             if (key == UP || key == DOWN) {
-                if (current) current->navigate(key);
-            } else if (key == LEFT && current && current->getLeftPointer()) {
-                current->getFocused()->notifyHover(*this, false); // Unhover old
-                containerID = current->getLeftPointer();
-                containerID->tui = this;
-                containerID->focusedIndex = 0;
-                if(!containerID->elements.empty()) containerID->getFocused()->notifyHover(*this, true); // hover new
-            } else if (key == RIGHT && current && current->getRightPointer()) {
-                current->getFocused()->notifyHover(*this, false); // Unhover old
-                containerID = current->getRightPointer();
-                containerID->tui = this;
-                containerID->focusedIndex = 0;
-                if(!containerID->elements.empty()) containerID->getFocused()->notifyHover(*this, true); // hover new
+                bool handled = focusedElem->handleNavigation(key, *this);
+                if (!handled && current) current->navigate(key);
+            } else if (key == LEFT) {
+                if (!focusedElem->handleNavigation(key, *this) && current && current->getLeftPointer()) {
+                    current->getFocused()->notifyHover(*this, false); // Unhover old
+                    containerID = current->getLeftPointer();
+                    containerID->tui = this;
+                    containerID->focusedIndex = 0;
+                    if(!containerID->elements.empty()) containerID->getFocused()->notifyHover(*this, true); // hover new
+                }
+            } else if (key == RIGHT) {
+                if (!focusedElem->handleNavigation(key, *this) && current && current->getRightPointer()) {
+                    current->getFocused()->notifyHover(*this, false); // Unhover old
+                    containerID = current->getRightPointer();
+                    containerID->tui = this;
+                    containerID->focusedIndex = 0;
+                    if(!containerID->elements.empty()) containerID->getFocused()->notifyHover(*this, true); // hover new
+                }
             } else if (key == ENTER) {
                 if (focusedElem->capturesInput()) {
                     userState = CAPTURE;

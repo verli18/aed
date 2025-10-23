@@ -970,3 +970,373 @@ void MultiLineInput::onInteract(pressedKey key, char c, uint8_t& userState, TUIm
         return;
     }
 }
+
+// --- ListView Implementation ---
+ListView::ListView(const std::string& lbl, const std::vector<std::string>& itemList, point pos, int w, int h, int visibleRows)
+    : items(itemList), selectedIndex(0), label(lbl), visibleRows(visibleRows), scrollOffset(0) {
+    position = pos;
+    size = {w, h};
+    style.fg = {255, 255, 255, 255};
+    style.bg = {80, 80, 80, 255};
+    style.fgHi = {255, 255, 255, 255};
+    style.bgHi = {100, 100, 100, 255};
+    isHovered = false;
+    
+    if (items.empty()) {
+        items.push_back("No items");
+    }
+    if (selectedIndex >= (int)items.size()) {
+        selectedIndex = 0;
+    }
+}
+
+void ListView::render(TUImanager& tui) {
+    color useFg = isHovered ? style.fgHi : style.fg;
+    color useBg = isHovered ? style.bgHi : style.bg;
+    
+    // Use the specified height or calculate from visibleRows
+    int totalHeight = std::max(5, size.y); // Minimum height
+    int actualVisibleRows = totalHeight - 2; // -2 for label/borders
+    
+    // Draw container box
+    tui.drawBox(renderPos.x, renderPos.y, size.x, totalHeight, useFg, useBg, style.bg);
+    
+    // Draw label with curly brackets at the top
+    std::string labelText = "{" + label + "}";
+    tui.drawString(labelText, useFg, {0,0,0,0}, renderPos.x + 1, renderPos.y);
+    
+    // Calculate scrolling parameters
+    bool needsScrollbar = (int)items.size() > actualVisibleRows;
+    int scrollbarWidth = needsScrollbar ? 1 : 0;
+    int contentWidth = size.x - 2 - scrollbarWidth; // Account for borders and scrollbar
+    
+    // Adjust scroll offset to keep selected item visible
+    if (selectedIndex < scrollOffset) {
+        scrollOffset = selectedIndex;
+    }
+    if (selectedIndex >= scrollOffset + actualVisibleRows) {
+        scrollOffset = selectedIndex - actualVisibleRows + 1;
+    }
+    
+    // Clamp scroll offset
+    int maxScroll = std::max(0, (int)items.size() - actualVisibleRows);
+    if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+    if (scrollOffset < 0) scrollOffset = 0;
+    
+    // Draw items
+    for (int i = 0; i < actualVisibleRows && (scrollOffset + i) < (int)items.size(); ++i) {
+        int itemIndex = scrollOffset + i;
+        std::string itemText = items[itemIndex];
+        
+        // Truncate if too long
+        if ((int)itemText.length() > contentWidth - 2) {
+            itemText = itemText.substr(0, contentWidth - 5) + "...";
+        }
+        
+        // Use inverted colors for selected item
+        color itemBg, itemFg;
+        if (itemIndex == selectedIndex) {
+            itemBg = style.fgHi; // Use highlight foreground as background
+            itemFg = style.bgHi; // Use highlight background as foreground
+        } else {
+            itemBg = useBg;
+            itemFg = useFg;
+        }
+        
+        // Add selection indicator
+        std::string displayText = (itemIndex == selectedIndex) ? ">" + itemText : " " + itemText;
+        
+        // Clear the line background first
+        for (int col = 0; col < contentWidth; ++col) {
+            characterSpace cs{};
+            cs.character = ' ';
+            cs.colorForeground = itemFg;
+            cs.colorBackground = itemBg;
+            tui.drawCharacter(cs, renderPos.x + 1 + col, renderPos.y + 1 + i);
+        }
+        
+        tui.drawString(displayText, itemFg, itemBg, renderPos.x + 1, renderPos.y + 1 + i);
+    }
+    
+    // Draw scrollbar if needed
+    if (needsScrollbar) {
+        int scrollbarX = renderPos.x + size.x - 2;
+        int scrollbarStartY = renderPos.y + 1;
+        int scrollbarHeight = actualVisibleRows;
+        
+        // Draw up arrow
+        tui.drawString("▲", useFg, useBg, scrollbarX, scrollbarStartY);
+        
+        // Calculate scrollbar thumb position and size
+        int trackHeight = scrollbarHeight - 2; // Reserve space for arrows
+        if (trackHeight > 0) {
+            float scrollRatio = (float)scrollOffset / std::max(1, (int)items.size() - actualVisibleRows);
+            float thumbSize = std::max(1.0f, (float)trackHeight * actualVisibleRows / items.size());
+            int thumbPos = (int)(scrollRatio * (trackHeight - thumbSize));
+            
+            // Draw scrollbar track
+            for (int i = 0; i < trackHeight; ++i) {
+                std::string scrollChar;
+                if (i >= thumbPos && i < thumbPos + (int)thumbSize) {
+                    scrollChar = "█"; // Full block for thumb
+                } else {
+                    scrollChar = "│"; // Light vertical bar for track
+                }
+                tui.drawString(scrollChar, useFg, useBg, scrollbarX, scrollbarStartY + 1 + i);
+            }
+        }
+        
+        // Draw down arrow
+        tui.drawString("▼", useFg, useBg, scrollbarX, scrollbarStartY + scrollbarHeight - 1);
+    }
+    
+    // Show item count at bottom
+    char countStr[32];
+    snprintf(countStr, sizeof(countStr), "%d/%d", selectedIndex + 1, (int)items.size());
+    tui.drawString(countStr, useFg, {0,0,0,0}, renderPos.x + 1, renderPos.y + totalHeight - 1);
+}
+
+void ListView::onHover(bool hovered) {
+    isHovered = hovered;
+}
+
+void ListView::onInteract(pressedKey key, char /*c*/, uint8_t& userState, TUImanager& tui) {
+    if (key == ENTER) {
+        userState = NAVIGATING;
+        notifyClick(tui);
+        notifyCaptureEnd(tui);
+    } else if (key == UP) {
+        selectedIndex--;
+        if (selectedIndex < 0) {
+            selectedIndex = (int)items.size() - 1;
+        }
+    } else if (key == DOWN) {
+        selectedIndex++;
+        if (selectedIndex >= (int)items.size()) {
+            selectedIndex = 0;
+        }
+    } else if (key == ESC) {
+        userState = NAVIGATING;
+        notifyCaptureEnd(tui);
+    }
+}
+
+std::string ListView::getSelectedItem() const {
+    if (selectedIndex >= 0 && selectedIndex < (int)items.size()) {
+        return items[selectedIndex];
+    }
+    return "";
+}
+
+void ListView::setItems(const std::vector<std::string>& newItems) {
+    items = newItems;
+    if (items.empty()) {
+        items.push_back("No items");
+    }
+    // Reset selection if out of bounds
+    if (selectedIndex >= (int)items.size()) {
+        selectedIndex = std::max(0, (int)items.size() - 1);
+    }
+    // Reset scroll
+    scrollOffset = 0;
+}
+
+// --- RichListView Implementation ---
+RichListView::RichListView(const std::string& lbl, const std::vector<RichListItem>& itemList,
+                           point pos, int w, int h, int itemHeight)
+    : items(itemList), selectedIndex(0), label(lbl), scrollOffset(0), itemHeight(itemHeight) {
+    position = pos;
+    size = {w, h};
+    style.fg = {255, 255, 255, 255};
+    style.bg = {80, 80, 80, 255};
+    style.fgHi = {255, 255, 255, 255};
+    style.bgHi = {100, 100, 100, 255};
+    isHovered = false;
+    
+    if (selectedIndex >= (int)items.size()) {
+        selectedIndex = 0;
+    }
+}
+
+void RichListView::render(TUImanager& tui) {
+    color useFg = isHovered ? style.fgHi : style.fg;
+    color useBg = isHovered ? style.bgHi : style.bg;
+    
+    int totalHeight = std::max(5, size.y);
+    
+    // Draw outer container box
+    tui.drawBox(renderPos.x, renderPos.y, size.x, totalHeight, useFg, useBg, style.bg);
+    
+    // Draw label
+    std::string labelText = "{" + label + "}";
+    tui.drawString(labelText, useFg, {0,0,0,0}, renderPos.x + 1, renderPos.y);
+    
+    if (items.empty()) {
+        tui.drawString("No items", useFg, useBg, renderPos.x + 2, renderPos.y + 2);
+        return;
+    }
+    
+    // Calculate available space for items
+    int contentHeight = totalHeight - 2; // -2 for top/bottom borders
+    int contentWidth = size.x - 2; // -2 for left/right borders
+    
+    // Calculate how many items can fit
+    int visibleItems = contentHeight / itemHeight;
+    if (visibleItems < 1) visibleItems = 1;
+    
+    // Determine if we need a scrollbar
+    bool needsScrollbar = (int)items.size() > visibleItems;
+    int scrollbarWidth = needsScrollbar ? 1 : 0;
+    int itemWidth = contentWidth - scrollbarWidth - 2; // -2 for item padding
+    
+    // Adjust scroll offset to keep selected item visible
+    if (selectedIndex < scrollOffset) {
+        scrollOffset = selectedIndex;
+    }
+    if (selectedIndex >= scrollOffset + visibleItems) {
+        scrollOffset = selectedIndex - visibleItems + 1;
+    }
+    
+    // Clamp scroll offset
+    int maxScroll = std::max(0, (int)items.size() - visibleItems);
+    if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+    if (scrollOffset < 0) scrollOffset = 0;
+    
+    // Draw items
+    int currentY = renderPos.y + 1;
+    for (int i = 0; i < visibleItems && (scrollOffset + i) < (int)items.size(); ++i) {
+        int itemIndex = scrollOffset + i;
+        const RichListItem& item = items[itemIndex];
+        
+        // Determine colors for this item
+        color itemFg, itemBg, itemFgHi, itemBgHi;
+        if (itemIndex == selectedIndex) {
+            // Selected item: use highlight colors
+            itemFg = item.theme.fgHi;
+            itemBg = item.theme.bgHi;
+            itemFgHi = item.theme.fgHi;
+            itemBgHi = item.theme.bgHi;
+        } else {
+            // Normal item: use regular colors
+            itemFg = item.theme.fg;
+            itemBg = item.theme.bg;
+            itemFgHi = item.theme.fgHi;
+            itemBgHi = item.theme.bgHi;
+        }
+        
+        // Draw item box (mini-container)
+        int itemX = renderPos.x + 2;
+        int actualItemHeight = std::min(itemHeight, contentHeight - (currentY - renderPos.y - 1));
+        
+        if (actualItemHeight < 3) break; // Not enough space for item
+        
+        tui.drawBox(itemX, currentY, itemWidth, actualItemHeight, itemFg, itemBg, itemBg);
+        
+        // Draw selection indicator if selected
+        if (itemIndex == selectedIndex) {
+            tui.drawString(">", itemFgHi, itemBg, itemX - 1, currentY + actualItemHeight / 2);
+        }
+        
+        // Draw multi-line content inside the item box
+        int lineY = currentY + 1;
+        int maxLines = actualItemHeight - 2; // -2 for top/bottom borders
+        int maxLineWidth = itemWidth - 2; // -2 for left/right borders
+        
+        for (int lineIdx = 0; lineIdx < (int)item.lines.size() && lineIdx < maxLines; ++lineIdx) {
+            std::string line = item.lines[lineIdx];
+            
+            // Truncate if too long
+            if ((int)line.length() > maxLineWidth) {
+                line = line.substr(0, maxLineWidth - 3) + "...";
+            }
+            
+            tui.drawString(line, itemFg, itemBg, itemX + 1, lineY + lineIdx);
+        }
+        
+        currentY += actualItemHeight;
+    }
+    
+    // Draw scrollbar if needed
+    if (needsScrollbar) {
+        int scrollbarX = renderPos.x + size.x - 2;
+        int scrollbarStartY = renderPos.y + 1;
+        int scrollbarHeight = contentHeight;
+        
+        // Draw up arrow
+        tui.drawString("▲", useFg, useBg, scrollbarX, scrollbarStartY);
+        
+        // Calculate scrollbar thumb
+        int trackHeight = scrollbarHeight - 2; // Reserve space for arrows
+        if (trackHeight > 0 && items.size() > 0) {
+            float scrollRatio = (float)scrollOffset / std::max(1, (int)items.size() - visibleItems);
+            float thumbSize = std::max(1.0f, (float)trackHeight * visibleItems / items.size());
+            int thumbPos = (int)(scrollRatio * (trackHeight - thumbSize));
+            
+            // Draw scrollbar track
+            for (int i = 0; i < trackHeight; ++i) {
+                std::string scrollChar;
+                if (i >= thumbPos && i < thumbPos + (int)thumbSize) {
+                    scrollChar = "█";
+                } else {
+                    scrollChar = "│";
+                }
+                tui.drawString(scrollChar, useFg, useBg, scrollbarX, scrollbarStartY + 1 + i);
+            }
+        }
+        
+        // Draw down arrow
+        tui.drawString("▼", useFg, useBg, scrollbarX, scrollbarStartY + scrollbarHeight - 1);
+    }
+    
+    // Show item count
+    char countStr[32];
+    snprintf(countStr, sizeof(countStr), "%d/%d", selectedIndex + 1, (int)items.size());
+    tui.drawString(countStr, useFg, {0,0,0,0}, renderPos.x + 1, renderPos.y + totalHeight - 1);
+}
+
+void RichListView::onHover(bool hovered) {
+    isHovered = hovered;
+}
+
+void RichListView::onInteract(pressedKey key, char /*c*/, uint8_t& userState, TUImanager& tui) {
+    if (items.empty()) return;
+    
+    if (key == ENTER) {
+        userState = NAVIGATING;
+        notifyClick(tui);
+        notifyCaptureEnd(tui);
+    } else if (key == UP) {
+        selectedIndex--;
+        if (selectedIndex < 0) {
+            selectedIndex = (int)items.size() - 1;
+        }
+    } else if (key == DOWN) {
+        selectedIndex++;
+        if (selectedIndex >= (int)items.size()) {
+            selectedIndex = 0;
+        }
+    } else if (key == ESC) {
+        userState = NAVIGATING;
+        notifyCaptureEnd(tui);
+    }
+}
+
+const RichListItem* RichListView::getSelectedItem() const {
+    if (selectedIndex >= 0 && selectedIndex < (int)items.size()) {
+        return &items[selectedIndex];
+    }
+    return nullptr;
+}
+
+void RichListView::setItems(const std::vector<RichListItem>& newItems) {
+    items = newItems;
+    // Reset selection if out of bounds
+    if (selectedIndex >= (int)items.size() && !items.empty()) {
+        selectedIndex = (int)items.size() - 1;
+    }
+    if (items.empty()) {
+        selectedIndex = 0;
+    }
+    // Reset scroll
+    scrollOffset = 0;
+}
