@@ -81,6 +81,18 @@ std::optional<models::Book> BookRepository::findByISBN(const std::string& isbn) 
     return std::nullopt;
 }
 
+std::optional<models::Book> BookRepository::findByHashId(const std::string& hashId) const {
+    // Hash IDs are generated from title + author, so we need to search all books
+    // and compare their generated hash IDs
+    auto allBooks = findAll();
+    for (const auto& book : allBooks) {
+        if (book.hashId() == hashId) {
+            return book;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<models::Book> BookRepository::searchByTitle(const std::string& title) const {
     constexpr auto sql = R"sql(
         SELECT id, title, author, published_year, isbn, copies_available

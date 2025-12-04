@@ -8,13 +8,7 @@
 #include "chrmaTUI.hpp"
 #include "elements.hpp"
 
-namespace {
-
-constexpr auto kDefaultDatabasePath = "library_manager.db";
-
-}  // anonymous namespace
-
-// Forward declaration
+namespace {constexpr auto kDefaultDatabasePath = "library_manager.db";}
 namespace ui { void runTestUI(app::Database& db); }
 
 int main(int argc, char** argv) {

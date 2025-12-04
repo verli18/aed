@@ -37,9 +37,6 @@ LoanCreationModal::LoanCreationModal(TUImanager& tui,
     cancelBtn->setPercentPosition(50, 80);
     cancelBtn->setAnchors(element::AnchorX::Center, element::AnchorY::Top);
     
-    statusText = new Text("", {0, 0});
-    statusText->setPercentPosition(5, 85);
-    
     // Add elements
     modalContainer->addElement(titleText);
     modalContainer->addElement(studentRegInput);
@@ -47,7 +44,6 @@ LoanCreationModal::LoanCreationModal(TUImanager& tui,
     modalContainer->addElement(dueDaysInput);
     modalContainer->addElement(submitBtn);
     modalContainer->addElement(cancelBtn);
-    modalContainer->addElement(statusText);
 }
 
 LoanCreationModal::~LoanCreationModal() {
@@ -57,21 +53,19 @@ LoanCreationModal::~LoanCreationModal() {
     delete dueDaysInput;
     delete submitBtn;
     delete cancelBtn;
-    delete statusText;
     delete modalContainer;
 }
 
 void LoanCreationModal::open(TUImanager& tui, container*) {
-    state.isOpen = true;
+    isOpen_ = true;
     studentRegInput->text.clear();
     bookIdInput->text.clear();
     dueDaysInput->text = "14";
-    statusText->content.clear();
     tui.focusContainer(modalContainer, 0);
 }
 
 void LoanCreationModal::close(TUImanager& tui, container* returnTo) {
-    state.isOpen = false;
+    isOpen_ = false;
     tui.focusContainer(returnTo, 0);
 }
 
@@ -85,21 +79,31 @@ bool LoanCreationModal::handleSubmit() {
         return false;
     }
     
-    auto studentOpt = studentRepo->findByRegistrationNumber(studentRegInput->text);
+    // Find student by registration number or hash ID
+    std::optional<app::models::Student> studentOpt;
+    if (studentRegInput->text.find("ST-") == 0) {
+        studentOpt = studentRepo->findByHashId(studentRegInput->text);
+    } else {
+        studentOpt = studentRepo->findByRegistrationNumber(studentRegInput->text);
+    }
     if (!studentOpt) {
         setError("Estudante não encontrado");
         return false;
     }
     
-    int64_t bookId = 0;
-    try {
-        bookId = std::stoll(bookIdInput->text);
-    } catch (...) {
-        setError("ID do livro inválido");
-        return false;
+    // Find book by hash ID or numeric ID
+    std::optional<app::models::Book> bookOpt;
+    if (bookIdInput->text.find("BK-") == 0) {
+        bookOpt = bookRepo->findByHashId(bookIdInput->text);
+    } else {
+        try {
+            int64_t bookId = std::stoll(bookIdInput->text);
+            bookOpt = bookRepo->findById(bookId);
+        } catch (...) {
+            bookOpt = bookRepo->findByHashId(bookIdInput->text);
+        }
     }
     
-    auto bookOpt = bookRepo->findById(bookId);
     if (!bookOpt) {
         setError("Livro não encontrado");
         return false;
@@ -168,15 +172,11 @@ LoanReturnModal::LoanReturnModal(TUImanager& tui,
     cancelBtn->setPercentPosition(50, 70);
     cancelBtn->setAnchors(element::AnchorX::Center, element::AnchorY::Top);
     
-    statusText = new Text("", {0, 0});
-    statusText->setPercentPosition(5, 80);
-    
     // Add elements
     modalContainer->addElement(titleText);
     modalContainer->addElement(loanIdInput);
     modalContainer->addElement(submitBtn);
     modalContainer->addElement(cancelBtn);
-    modalContainer->addElement(statusText);
 }
 
 LoanReturnModal::~LoanReturnModal() {
@@ -184,19 +184,17 @@ LoanReturnModal::~LoanReturnModal() {
     delete loanIdInput;
     delete submitBtn;
     delete cancelBtn;
-    delete statusText;
     delete modalContainer;
 }
 
 void LoanReturnModal::open(TUImanager& tui, container*) {
-    state.isOpen = true;
+    isOpen_ = true;
     loanIdInput->text.clear();
-    statusText->content.clear();
     tui.focusContainer(modalContainer, 0);
 }
 
 void LoanReturnModal::close(TUImanager& tui, container* returnTo) {
-    state.isOpen = false;
+    isOpen_ = false;
     tui.focusContainer(returnTo, 0);
 }
 
@@ -206,15 +204,19 @@ bool LoanReturnModal::handleSubmit() {
         return false;
     }
     
-    int64_t loanId = 0;
-    try {
-        loanId = std::stoll(loanIdInput->text);
-    } catch (...) {
-        setError("ID inválido");
-        return false;
+    // Find loan by hash ID or numeric ID
+    std::optional<app::models::Loan> loanOpt;
+    if (loanIdInput->text.find("LN-") == 0) {
+        loanOpt = loanRepo->findByHashId(loanIdInput->text);
+    } else {
+        try {
+            int64_t loanId = std::stoll(loanIdInput->text);
+            loanOpt = loanRepo->findById(loanId);
+        } catch (...) {
+            loanOpt = loanRepo->findByHashId(loanIdInput->text);
+        }
     }
     
-    auto loanOpt = loanRepo->findById(loanId);
     if (!loanOpt) {
         setError("Empréstimo não encontrado");
         return false;
@@ -225,7 +227,7 @@ bool LoanReturnModal::handleSubmit() {
     }
     
     try {
-        if (!loanRepo->markReturned(loanId, getTodayISODate())) {
+        if (!loanRepo->markReturned(loanOpt->id, getTodayISODate())) {
             setError("Falha ao registrar devolução");
             return false;
         }

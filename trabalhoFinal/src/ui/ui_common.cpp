@@ -53,7 +53,6 @@ void quickSortStrings(std::vector<std::string>& arr, int low, int high) {
     }
 }
 
-// ==================== DATE UTILITIES ====================
 
 std::string formatDateISO(const std::chrono::system_clock::time_point& tp) {
     std::time_t tt = std::chrono::system_clock::to_time_t(tp);
@@ -160,7 +159,7 @@ std::vector<RichListItem> loadLoansRichFromDatabase(app::repos::LoanRepository& 
         lines.push_back("Retirado em: " + detail.loan.loan_date + " | Devolver até: " + detail.loan.due_date);
         lines.push_back(detail.loan.is_overdue ? "⚠ ATRASADO" : "✓ No prazo");
 
-        loans.emplace_back(lines, detail.loan.is_overdue ? overdueTheme : normalTheme);
+        loans.emplace_back(lines, detail.loan.is_overdue ? overdueTheme : normalTheme, detail.loan.id);
     }
 
     if (loans.empty()) {

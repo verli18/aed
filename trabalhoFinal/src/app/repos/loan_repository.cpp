@@ -94,6 +94,18 @@ std::optional<models::Loan> LoanRepository::findById(int64_t id) const {
 	return std::nullopt;
 }
 
+std::optional<models::Loan> LoanRepository::findByHashId(const std::string& hashId) const {
+	// Hash IDs are generated from student_id + book_id + loan_date
+	// We need to search all active loans and compare their generated hash IDs
+	auto allLoans = findActiveLoans();
+	for (const auto& loan : allLoans) {
+		if (loan.hashId() == hashId) {
+			return loan;
+		}
+	}
+	return std::nullopt;
+}
+
 std::vector<models::Loan> LoanRepository::findActiveLoans() const {
 	constexpr auto sql = R"sql(
 		SELECT id, student_id, book_id, loan_date, due_date, return_date,

@@ -12,7 +12,6 @@ namespace app::repos {
 /// Repository for CRUD operations on Book entities
 class BookRepository {
 public:
-    /// Constructor takes a database connection
     explicit BookRepository(Database& db);
 
     /// Create a new book
@@ -30,6 +29,11 @@ public:
     /// @param isbn ISBN number
     /// @return Book if found, std::nullopt otherwise
     [[nodiscard]] std::optional<models::Book> findByISBN(const std::string& isbn) const;
+
+    /// Find a book by its hash ID (e.g., "BK-NcaKQQ")
+    /// @param hashId The hash-based ID displayed to users
+    /// @return Book if found, std::nullopt otherwise
+    [[nodiscard]] std::optional<models::Book> findByHashId(const std::string& hashId) const;
 
     /// Search books by title (partial match, case-insensitive)
     /// @param title Title or part of title to search for

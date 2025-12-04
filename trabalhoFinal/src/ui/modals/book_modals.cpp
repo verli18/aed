@@ -2,8 +2,6 @@
 
 namespace ui {
 
-// ==================== BOOK REGISTRATION MODAL ====================
-
 BookRegistrationModal::BookRegistrationModal(TUImanager& tui, app::repos::BookRepository* repo)
     : bookRepo(repo) {
     
@@ -33,7 +31,6 @@ BookRegistrationModal::BookRegistrationModal(TUImanager& tui, app::repos::BookRe
     isbnInput->setPercentPosition(8, 50);
     isbnInput->setPercentW(84);
     
-    // Buttons - vertical for proper navigation
     submitBtn = new Button("[ Confirmar ]", {0, 0}, 18, 3);
     submitBtn->setPercentPosition(50, 64);
     submitBtn->setAnchors(element::AnchorX::Center, element::AnchorY::Top);
@@ -41,9 +38,6 @@ BookRegistrationModal::BookRegistrationModal(TUImanager& tui, app::repos::BookRe
     cancelBtn = new Button("[ Cancelar ]", {0, 0}, 18, 3);
     cancelBtn->setPercentPosition(50, 76);
     cancelBtn->setAnchors(element::AnchorX::Center, element::AnchorY::Top);
-    
-    statusText = new Text("", {0, 0});
-    statusText->setPercentPosition(5, 82);
     
     // Add elements
     modalContainer->addElement(titleText);
@@ -54,7 +48,6 @@ BookRegistrationModal::BookRegistrationModal(TUImanager& tui, app::repos::BookRe
     modalContainer->addElement(isbnInput);
     modalContainer->addElement(submitBtn);
     modalContainer->addElement(cancelBtn);
-    modalContainer->addElement(statusText);
     
     submitBtn->onClickHandler = [this](element&, TUImanager&) {
         this->handleSubmit();
@@ -70,23 +63,21 @@ BookRegistrationModal::~BookRegistrationModal() {
     delete copiesInput;
     delete submitBtn;
     delete cancelBtn;
-    delete statusText;
     delete modalContainer;
 }
 
 void BookRegistrationModal::open(TUImanager& tui, container*) {
-    state.isOpen = true;
+    isOpen_ = true;
     titleInput->text.clear();
     authorInput->text.clear();
     yearInput->text.clear();
     isbnInput->text.clear();
     copiesInput->text = "1";
-    statusText->content.clear();
     tui.focusContainer(modalContainer, 0);
 }
 
 void BookRegistrationModal::close(TUImanager& tui, container* returnTo) {
-    state.isOpen = false;
+    isOpen_ = false;
     tui.focusContainer(returnTo, 0);
 }
 
@@ -190,9 +181,6 @@ BookEditModal::BookEditModal(TUImanager& tui, app::repos::BookRepository* repo)
     cancelBtn->setPercentPosition(50, 88);
     cancelBtn->setAnchors(element::AnchorX::Center, element::AnchorY::Top);
     
-    statusText = new Text("", {0, 0});
-    statusText->setPercentPosition(5, 86);
-    
     // Add elements
     modalContainer->addElement(titleText);
     modalContainer->addElement(idInput);
@@ -205,7 +193,6 @@ BookEditModal::BookEditModal(TUImanager& tui, app::repos::BookRepository* repo)
     modalContainer->addElement(saveBtn);
     modalContainer->addElement(deleteBtn);
     modalContainer->addElement(cancelBtn);
-    modalContainer->addElement(statusText);
     
     // Callbacks
     loadBtn->onClickHandler = [this](element&, TUImanager&) { handleLoad(); };
@@ -225,18 +212,17 @@ BookEditModal::~BookEditModal() {
     delete saveBtn;
     delete deleteBtn;
     delete cancelBtn;
-    delete statusText;
     delete modalContainer;
 }
 
 void BookEditModal::open(TUImanager& tui, container*) {
-    state.isOpen = true;
+    isOpen_ = true;
     clearFields();
     tui.focusContainer(modalContainer, 0);
 }
 
 void BookEditModal::close(TUImanager& tui, container* returnTo) {
-    state.isOpen = false;
+    isOpen_ = false;
     tui.focusContainer(returnTo, 0);
 }
 
@@ -247,7 +233,6 @@ void BookEditModal::clearFields() {
     yearInput->text.clear();
     isbnInput->text.clear();
     copiesInput->text.clear();
-    statusText->content.clear();
     currentBookId = 0;
 }
 
@@ -257,21 +242,28 @@ void BookEditModal::handleLoad() {
         return;
     }
     
-    int64_t id = 0;
-    try {
-        id = std::stoll(idInput->text);
-    } catch (...) {
-        setError("ID inválido");
-        return;
+    std::optional<app::models::Book> bookOpt;
+    
+    // Try to find by hash ID first (e.g., "BK-NcaKQQ")
+    if (idInput->text.find("BK-") == 0) {
+        bookOpt = bookRepo->findByHashId(idInput->text);
+    } else {
+        // Try numeric ID
+        try {
+            int64_t id = std::stoll(idInput->text);
+            bookOpt = bookRepo->findById(id);
+        } catch (...) {
+
+            bookOpt = bookRepo->findByHashId(idInput->text);
+        }
     }
     
-    auto bookOpt = bookRepo->findById(id);
     if (!bookOpt) {
         setError("Livro não encontrado");
         return;
     }
     
-    currentBookId = id;
+    currentBookId = bookOpt->id;
     titleInput->text = bookOpt->title;
     authorInput->text = bookOpt->author;
     yearInput->text = bookOpt->published_year ? std::to_string(*bookOpt->published_year) : "";

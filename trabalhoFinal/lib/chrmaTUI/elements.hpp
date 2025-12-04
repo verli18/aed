@@ -221,9 +221,10 @@ public:
 struct RichListItem {
     std::vector<std::string> lines;  // Multi-line content for this item
     standardStyle theme;              // Custom colors for this item
+    int64_t id = 0;                   // Optional database ID for this item
     
-    RichListItem(const std::vector<std::string>& lines, const standardStyle& theme)
-        : lines(lines), theme(theme) {}
+    RichListItem(const std::vector<std::string>& lines, const standardStyle& theme, int64_t id = 0)
+        : lines(lines), theme(theme), id(id) {}
 };
 
 // RichListView: scrollable list with multi-line items rendered as mini-containers.
@@ -286,13 +287,18 @@ public:
     void pushError(const std::string& message) { push(message, NotificationType::Error); }
     
     void render(TUImanager& tui);
-    void update(); // Remove expired notifications
+    bool update(TUImanager& tui); // Remove expired notifications, marks area dirty if any were removed
+    bool empty() const { return notifications.empty(); }
+    
+    // Clear the notification display area (marks it dirty for redraw)
+    void clearArea(TUImanager& tui);
     
     int maxNotifications = 5;  // Max visible at once
     int notificationWidth = 35; // Width of notification boxes
     
 private:
     std::vector<Notification> notifications;
+    int lastRenderedHeight = 0; // Track how much vertical space was used
     
     color getBackgroundColor(NotificationType type) const;
     color getForegroundColor(NotificationType type) const;

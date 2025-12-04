@@ -8,38 +8,28 @@ namespace ui {
 class BaseModal {
 public:
     container* modalContainer = nullptr;
-    Text* statusText = nullptr;
     Button* cancelBtn = nullptr;
-    ModalState state;
+    bool isOpen_ = false;
     
     virtual ~BaseModal() = default;
     
-    bool isOpen() const { return state.isOpen; }
+    bool isOpen() const { return isOpen_; }
     
     virtual void open(TUImanager& tui, container* returnTo) = 0;
     virtual void close(TUImanager& tui, container* returnTo) = 0;
     
     void render(TUImanager& tui) {
-        if (state.isOpen) {
+        if (isOpen_) {
             modalContainer->render(tui);
         }
     }
     
 protected:
-    // Set status text in modal AND push notification
-    void setStatus(const std::string& msg, color fg) {
-        if (statusText) {
-            setStatusText(statusText, msg, fg);
-        }
-    }
-    
     void setError(const std::string& msg) {
-        setStatus("Erro: " + msg, COLOR_ERROR);
         notifyError(msg);
     }
     
     void setSuccess(const std::string& msg) {
-        setStatus(msg, COLOR_SUCCESS);
         notifySuccess(msg);
     }
     

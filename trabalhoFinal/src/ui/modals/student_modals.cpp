@@ -2,7 +2,6 @@
 
 namespace ui {
 
-// ==================== STUDENT REGISTRATION MODAL ====================
 
 StudentRegistrationModal::StudentRegistrationModal(TUImanager& tui, app::repos::StudentRepository* repo)
     : studentRepo(repo) {
@@ -37,9 +36,6 @@ StudentRegistrationModal::StudentRegistrationModal(TUImanager& tui, app::repos::
     cancelBtn->setPercentPosition(50, 84);
     cancelBtn->setAnchors(element::AnchorX::Center, element::AnchorY::Top);
     
-    statusText = new Text("", {0, 0});
-    statusText->setPercentPosition(5, 90);
-    
     // Add elements
     modalContainer->addElement(titleText);
     modalContainer->addElement(nameInput);
@@ -48,9 +44,7 @@ StudentRegistrationModal::StudentRegistrationModal(TUImanager& tui, app::repos::
     modalContainer->addElement(phoneInput);
     modalContainer->addElement(submitBtn);
     modalContainer->addElement(cancelBtn);
-    modalContainer->addElement(statusText);
-    
-    // Callbacks
+
     submitBtn->onClickHandler = [this](element&, TUImanager&) {
         this->handleSubmit();
     };
@@ -64,22 +58,20 @@ StudentRegistrationModal::~StudentRegistrationModal() {
     delete phoneInput;
     delete submitBtn;
     delete cancelBtn;
-    delete statusText;
     delete modalContainer;
 }
 
 void StudentRegistrationModal::open(TUImanager& tui, container*) {
-    state.isOpen = true;
+    isOpen_ = true;
     nameInput->text.clear();
     regNumberInput->text.clear();
     emailInput->text.clear();
     phoneInput->text.clear();
-    statusText->content.clear();
     tui.focusContainer(modalContainer, 0);
 }
 
 void StudentRegistrationModal::close(TUImanager& tui, container* returnTo) {
-    state.isOpen = false;
+    isOpen_ = false;
     tui.focusContainer(returnTo, 0);
 }
 
@@ -108,12 +100,10 @@ void StudentRegistrationModal::handleSubmit() {
     }
 }
 
-// ==================== STUDENT EDIT MODAL ====================
-
 StudentEditModal::StudentEditModal(TUImanager& tui, app::repos::StudentRepository* repo)
     : studentRepo(repo) {
     
-    modalContainer = createModalContainer(tui, 55, 28, "Editar/Excluir Estudante");
+    modalContainer = createModalContainer(tui, 55, 40, "Editar/Excluir Estudante");
     
     titleText = new Text("Busque por matrícula:", {0, 0});
     titleText->setPercentPosition(5, 4);
@@ -157,9 +147,6 @@ StudentEditModal::StudentEditModal(TUImanager& tui, app::repos::StudentRepositor
     cancelBtn->setPercentPosition(50, 90);
     cancelBtn->setAnchors(element::AnchorX::Center, element::AnchorY::Top);
     
-    statusText = new Text("", {0, 0});
-    statusText->setPercentPosition(5, 90);
-    
     // Add elements
     modalContainer->addElement(titleText);
     modalContainer->addElement(searchInput);
@@ -171,7 +158,6 @@ StudentEditModal::StudentEditModal(TUImanager& tui, app::repos::StudentRepositor
     modalContainer->addElement(saveBtn);
     modalContainer->addElement(deleteBtn);
     modalContainer->addElement(cancelBtn);
-    modalContainer->addElement(statusText);
     
     // Callbacks
     loadBtn->onClickHandler = [this](element&, TUImanager&) { handleLoad(); };
@@ -190,18 +176,17 @@ StudentEditModal::~StudentEditModal() {
     delete saveBtn;
     delete deleteBtn;
     delete cancelBtn;
-    delete statusText;
     delete modalContainer;
 }
 
 void StudentEditModal::open(TUImanager& tui, container*) {
-    state.isOpen = true;
+    isOpen_ = true;
     clearFields();
     tui.focusContainer(modalContainer, 0);
 }
 
 void StudentEditModal::close(TUImanager& tui, container* returnTo) {
-    state.isOpen = false;
+    isOpen_ = false;
     tui.focusContainer(returnTo, 0);
 }
 
@@ -211,17 +196,29 @@ void StudentEditModal::clearFields() {
     regNumberInput->text.clear();
     emailInput->text.clear();
     phoneInput->text.clear();
-    statusText->content.clear();
     currentStudentId = 0;
 }
 
 void StudentEditModal::handleLoad() {
     if (searchInput->text.empty()) {
-        setError("Digite uma matrícula");
+        setError("Digite uma matrícula ou ID");
         return;
     }
     
-    auto studentOpt = studentRepo->findByRegistrationNumber(searchInput->text);
+    std::optional<app::models::Student> studentOpt;
+    
+    // Try to find by hash ID first (e.g., "ST-abc123")
+    if (searchInput->text.find("ST-") == 0) {
+        studentOpt = studentRepo->findByHashId(searchInput->text);
+    } else {
+        // Try by registration number
+        studentOpt = studentRepo->findByRegistrationNumber(searchInput->text);
+        if (!studentOpt) {
+            // Also try as hash ID in case prefix was omitted
+            studentOpt = studentRepo->findByHashId(searchInput->text);
+        }
+    }
+    
     if (!studentOpt) {
         setError("Estudante não encontrado");
         return;

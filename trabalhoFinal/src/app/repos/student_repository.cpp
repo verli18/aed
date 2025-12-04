@@ -80,6 +80,18 @@ std::optional<models::Student> StudentRepository::findByRegistrationNumber(
     return std::nullopt;
 }
 
+std::optional<models::Student> StudentRepository::findByHashId(const std::string& hashId) const {
+    // Hash IDs are generated from name + registration_number, so we need to search all students
+    // and compare their generated hash IDs
+    auto allStudents = findAll();
+    for (const auto& student : allStudents) {
+        if (student.hashId() == hashId) {
+            return student;
+        }
+    }
+    return std::nullopt;
+}
+
 std::vector<models::Student> StudentRepository::findAll(bool activeOnly) const {
     const std::string sql = activeOnly
         ? R"sql(

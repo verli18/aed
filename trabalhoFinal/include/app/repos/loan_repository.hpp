@@ -27,6 +27,9 @@ public:
 
 	[[nodiscard]] std::optional<models::Loan> findById(int64_t id) const;
 
+	/// Find a loan by its hash ID (e.g., "LN-m9Tz4a")
+	[[nodiscard]] std::optional<models::Loan> findByHashId(const std::string& hashId) const;
+
 	[[nodiscard]] std::vector<models::Loan> findActiveLoans() const;
 
 	[[nodiscard]] std::vector<models::Loan> findByStudent(int64_t studentId, bool activeOnly = false) const;

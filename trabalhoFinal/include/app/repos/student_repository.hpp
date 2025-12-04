@@ -32,6 +32,11 @@ public:
     [[nodiscard]] std::optional<models::Student> findByRegistrationNumber(
         const std::string& registration_number) const;
 
+    /// Find a student by its hash ID (e.g., "ST-abc123")
+    /// @param hashId The hash-based ID displayed to users
+    /// @return Student if found, std::nullopt otherwise
+    [[nodiscard]] std::optional<models::Student> findByHashId(const std::string& hashId) const;
+
     /// Get all students
     /// @param activeOnly If true, only return active students
     /// @return Vector of all students

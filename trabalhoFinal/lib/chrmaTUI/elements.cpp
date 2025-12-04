@@ -1353,13 +1353,28 @@ void NotificationManager::push(const std::string& message, NotificationType type
     }
 }
 
-void NotificationManager::update() {
+bool NotificationManager::update(TUImanager& tui) {
     // Remove expired notifications
+    size_t oldSize = notifications.size();
     notifications.erase(
         std::remove_if(notifications.begin(), notifications.end(),
             [](const Notification& n) { return n.isExpired(); }),
         notifications.end()
     );
+    bool changed = notifications.size() != oldSize;
+    if (changed) {
+        // Mark the notification area as dirty so it gets redrawn
+        clearArea(tui);
+    }
+    return changed;
+}
+
+void NotificationManager::clearArea(TUImanager& tui) {
+    if (lastRenderedHeight > 0) {
+        int startX = tui.cols - notificationWidth - 2;
+        int startY = 1;
+        tui.markDirty(startX, startY, notificationWidth + 2, lastRenderedHeight);
+    }
 }
 
 color NotificationManager::getBackgroundColor(NotificationType type) const {
@@ -1383,9 +1398,10 @@ color NotificationManager::getForegroundColor(NotificationType type) const {
 }
 
 void NotificationManager::render(TUImanager& tui) {
-    update(); // Remove expired notifications first
-    
-    if (notifications.empty()) return;
+    if (notifications.empty()) {
+        lastRenderedHeight = 0;
+        return;
+    }
     
     // Save and set high z-index for notifications (above modals)
     int prevZ = tui.getCurrentZ();
@@ -1439,6 +1455,9 @@ void NotificationManager::render(TUImanager& tui) {
         
         yOffset += boxHeight + 1;
     }
+    
+    // Track how much space we used for clearing later
+    lastRenderedHeight = yOffset;
     
     tui.setCurrentZ(prevZ);
 }

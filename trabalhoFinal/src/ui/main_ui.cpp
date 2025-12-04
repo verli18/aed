@@ -5,32 +5,27 @@
 
 namespace ui {
 
-// Global notification manager pointer
 NotificationManager* globalNotifications = nullptr;
 
 void runTestUI(app::Database& db) {
     TUImanager tui;
-    
-    // ==================== NOTIFICATION SYSTEM ====================
     NotificationManager notifications;
     globalNotifications = &notifications;
     
-    // ==================== REPOSITORIES ====================
     app::repos::StudentRepository studentRepo(db);
     app::repos::BookRepository bookRepo(db);
     app::repos::LoanRepository loanRepo(db);
     
-    // ==================== MAIN LAYOUT ====================
-    // Left panel: Actions menu (40% width)
-    int menuWidth = tui.cols * 40 / 100;
+
+    int menuWidth = tui.cols * 30 / 100;
     container actionsMenu({0, 0}, {menuWidth, tui.rows}, defaultModalStyle(), "Ações");
     actionsMenu.setDefaultElementStyle(defaultModalStyle());
     actionsMenu.setInheritStyle(true);
     
-    // Right panel: Content views (60% width)
     int rightX = menuWidth;
     int rightW = tui.cols - rightX;
-    
+
+    //initializing container contexts
     container booksView({rightX, 0}, {rightW, tui.rows}, defaultModalStyle(), "Livros");
     booksView.setDefaultElementStyle(defaultModalStyle());
     booksView.setInheritStyle(true);
@@ -47,10 +42,7 @@ void runTestUI(app::Database& db) {
     searchView.setDefaultElementStyle(defaultModalStyle());
     searchView.setInheritStyle(true);
     
-    // ==================== MENU BUTTONS ====================
-    // Grouped by function with consistent spacing
     
-    // -- View Section --
     Text viewSectionLabel("─── Visualizar ───", {0, 0});
     viewSectionLabel.setPercentPosition(5, 3);
     
@@ -66,7 +58,6 @@ void runTestUI(app::Database& db) {
     Button searchBooksBtn("Buscar", {0, 0}, 16, 3);
     searchBooksBtn.setPercentPosition(8, 29);
     
-    // -- Register Section --
     Text registerSectionLabel("─── Cadastrar ───", {0, 0});
     registerSectionLabel.setPercentPosition(5, 38);
     
@@ -76,7 +67,6 @@ void runTestUI(app::Database& db) {
     Button registerStudentBtn("+ Estudante", {0, 0}, 16, 3);
     registerStudentBtn.setPercentPosition(8, 50);
     
-    // -- Edit Section --
     Text editSectionLabel("─── Gerenciar ───", {0, 0});
     editSectionLabel.setPercentPosition(5, 59);
     
@@ -86,7 +76,6 @@ void runTestUI(app::Database& db) {
     Button editStudentBtn("Editar Estudante", {0, 0}, 18, 3);
     editStudentBtn.setPercentPosition(8, 71);
     
-    // -- Loan Section --
     Text loanSectionLabel("─── Empréstimos ───", {0, 0});
     loanSectionLabel.setPercentPosition(5, 80);
     
@@ -96,7 +85,7 @@ void runTestUI(app::Database& db) {
     Button returnBookBtn("Devolver", {0, 0}, 14, 3);
     returnBookBtn.setPercentPosition(8, 92);
     
-    // ==================== LIST VIEWS ====================
+    //list views
     std::vector<std::string> booksData = loadBooksFromDatabase(bookRepo);
     std::vector<std::string> studentsData = loadStudentsFromDatabase(studentRepo);
     std::vector<std::string> searchData = searchBooksFromDatabase(bookRepo, "");
@@ -130,7 +119,6 @@ void runTestUI(app::Database& db) {
     searchResultsList.setPercentW(96);
     searchResultsList.setPercentH(75);
     
-    // ==================== ADD ELEMENTS TO CONTAINERS ====================
     actionsMenu.addElement(&viewSectionLabel);
     actionsMenu.addElement(&viewBooksBtn);
     actionsMenu.addElement(&viewStudentsBtn);
@@ -153,7 +141,6 @@ void runTestUI(app::Database& db) {
     searchView.addElement(&executeSearchBtn);
     searchView.addElement(&searchResultsList);
     
-    // ==================== CREATE MODALS ====================
     StudentRegistrationModal studentModal(tui, &studentRepo);
     studentModal.modalContainer->tui = &tui;
     
@@ -172,18 +159,16 @@ void runTestUI(app::Database& db) {
     StudentEditModal studentEditModal(tui, &studentRepo);
     studentEditModal.modalContainer->tui = &tui;
     
-    // ==================== VIEW STATE ====================
     ViewType currentView = ViewType::BOOKS;
     container* currentRightContainer = &booksView;
     
-    // ==================== CONTAINER NAVIGATION ====================
     actionsMenu.setRight(&booksView);
     booksView.setLeft(&actionsMenu);
     studentsView.setLeft(&actionsMenu);
     loansView.setLeft(&actionsMenu);
     searchView.setLeft(&actionsMenu);
     
-    // ==================== BUTTON CALLBACKS ====================
+    // button callbacks w/ lambdas
     
     // View buttons
     viewBooksBtn.onClickHandler = [&](element&, TUImanager&) {
@@ -244,9 +229,7 @@ void runTestUI(app::Database& db) {
     executeSearchBtn.onClickHandler = [&](element&, TUImanager&) {
         searchResultsList.setItems(searchBooksFromDatabase(bookRepo, searchInput.text));
     };
-    
-    // ==================== MODAL CALLBACKS ====================
-    
+        
     // Helper to refresh lists
     auto refreshLists = [&]() {
         booksList.setItems(loadBooksFromDatabase(bookRepo));
@@ -265,7 +248,6 @@ void runTestUI(app::Database& db) {
         // Stay open to show status, user closes with cancel
     };
     
-    // Student modal
     studentModal.cancelBtn->onClickHandler = [&](element&, TUImanager& t) {
         studentModal.close(t, &actionsMenu);
         refreshLists();
@@ -275,7 +257,6 @@ void runTestUI(app::Database& db) {
         studentModal.handleSubmit();
     };
     
-    // Loan modal
     loanModal.cancelBtn->onClickHandler = [&](element&, TUImanager& t) {
         loanModal.close(t, &actionsMenu);
         refreshLists();
@@ -288,7 +269,6 @@ void runTestUI(app::Database& db) {
         }
     };
     
-    // Return modal
     returnModal.cancelBtn->onClickHandler = [&](element&, TUImanager& t) {
         returnModal.close(t, &actionsMenu);
         refreshLists();
@@ -312,7 +292,7 @@ void runTestUI(app::Database& db) {
         refreshLists();
     };
     
-    // ==================== INITIALIZE TUI ====================
+    //finally initialize tui
     tui.containerID = &actionsMenu;
     actionsMenu.tui = &tui;
     booksView.tui = &tui;
@@ -335,7 +315,11 @@ void runTestUI(app::Database& db) {
     
     // ==================== MAIN EVENT LOOP ====================
     while (true) {
-        if (!tui.hasDirty()) {
+        // Update notifications even without input (for auto-removal of expired ones)
+        // This will mark the notification area dirty if any were removed
+        notifications.update(tui);
+        
+        if (!tui.hasDirty() && notifications.empty()) {
             if (!tui.waitForInput(16)) {
                 continue;
             }
@@ -369,5 +353,4 @@ void runTestUI(app::Database& db) {
     // Cleanup
     globalNotifications = nullptr;
 }
-
 } // namespace ui

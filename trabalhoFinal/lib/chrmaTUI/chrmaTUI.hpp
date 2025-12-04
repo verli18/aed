@@ -332,6 +332,12 @@ class TUImanager{
     inline void setCurrentZ(int z) { currentZ = z; }
     inline int getCurrentZ() const { return currentZ; }
     inline bool hasDirty() const { return dirtyCount > 0; }
+    
+    // Mark a rectangular region as dirty (needs redraw)
+    void markDirty(int x, int y, int width, int height);
+    
+    // Mark entire screen as dirty
+    void markAllDirty();
 };
 
 #endif // CHRMA_TUI_HPP

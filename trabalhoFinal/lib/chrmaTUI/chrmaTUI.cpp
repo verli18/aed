@@ -587,3 +587,30 @@ void container::navigate(pressedKey dir) {
         }
     }
 }
+
+void TUImanager::markDirty(int x, int y, int width, int height) {
+    for (int dy = 0; dy < height; ++dy) {
+        int yy = y + dy;
+        if (yy < 0 || yy >= rows) continue;
+        for (int dx = 0; dx < width; ++dx) {
+            int xx = x + dx;
+            if (xx < 0 || xx >= cols) continue;
+            if (!dirty[yy][xx]) {
+                dirty[yy][xx] = 1;
+                ++dirtyCount;
+            }
+            // Reset the cell to background so it gets redrawn
+            screenBuffer[yy][xx].z = -1;
+        }
+    }
+}
+
+void TUImanager::markAllDirty() {
+    dirtyCount = static_cast<size_t>(rows) * static_cast<size_t>(cols);
+    for (int y = 0; y < rows; ++y) {
+        for (int x = 0; x < cols; ++x) {
+            dirty[y][x] = 1;
+            screenBuffer[y][x].z = -1;
+        }
+    }
+}
