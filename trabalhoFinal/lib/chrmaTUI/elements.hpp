@@ -250,3 +250,50 @@ public:
     // Update items dynamically
     void setItems(const std::vector<RichListItem>& newItems);
 };
+
+// ==================== NOTIFICATION SYSTEM ====================
+
+enum class NotificationType {
+    Info,
+    Success,
+    Warning,
+    Error
+};
+
+struct Notification {
+    std::string message;
+    NotificationType type;
+    std::chrono::steady_clock::time_point created;
+    int durationMs;
+    
+    Notification(const std::string& msg, NotificationType t, int duration = 3000)
+        : message(msg), type(t), created(std::chrono::steady_clock::now()), durationMs(duration) {}
+    
+    bool isExpired() const {
+        auto now = std::chrono::steady_clock::now();
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - created).count();
+        return elapsed >= durationMs;
+    }
+};
+
+// NotificationManager: renders toast-style notifications in the top-right corner
+class NotificationManager {
+public:
+    void push(const std::string& message, NotificationType type = NotificationType::Info, int durationMs = 3000);
+    void pushInfo(const std::string& message) { push(message, NotificationType::Info); }
+    void pushSuccess(const std::string& message) { push(message, NotificationType::Success); }
+    void pushWarning(const std::string& message) { push(message, NotificationType::Warning); }
+    void pushError(const std::string& message) { push(message, NotificationType::Error); }
+    
+    void render(TUImanager& tui);
+    void update(); // Remove expired notifications
+    
+    int maxNotifications = 5;  // Max visible at once
+    int notificationWidth = 35; // Width of notification boxes
+    
+private:
+    std::vector<Notification> notifications;
+    
+    color getBackgroundColor(NotificationType type) const;
+    color getForegroundColor(NotificationType type) const;
+};

@@ -104,7 +104,6 @@ class element{
     virtual void onInteract(pressedKey /*key*/, char /*c*/, uint8_t& /*userState*/, TUImanager& /*tui*/) {}
         virtual void update() {}
         virtual bool capturesInput() { return false; }
-    virtual bool handleNavigation(pressedKey /*key*/, TUImanager& /*tui*/) { return false; }
         virtual bool canBeFocused() const { return true; }
 
     // Compute and apply percent/anchor-based layout for this frame

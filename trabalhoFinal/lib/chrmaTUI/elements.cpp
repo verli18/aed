@@ -34,7 +34,9 @@ void Button::render(TUImanager& tui) {
 
     // Vertically center text within the box
     int textY = renderPos.y + (h / 2);
-    int textX = renderPos.x + 1; // left padding inside the box
+    // Horizontally center text within the box
+    int textLen = tui.measureColumns(text);
+    int textX = renderPos.x + 1 + (interior - textLen) / 2;
     tui.drawString(text, useFg, useBg, textX, textY);
 }
 
@@ -1339,4 +1341,104 @@ void RichListView::setItems(const std::vector<RichListItem>& newItems) {
     }
     // Reset scroll
     scrollOffset = 0;
+}
+
+// ==================== NOTIFICATION MANAGER ====================
+
+void NotificationManager::push(const std::string& message, NotificationType type, int durationMs) {
+    notifications.emplace_back(message, type, durationMs);
+    // Limit to maxNotifications
+    while ((int)notifications.size() > maxNotifications) {
+        notifications.erase(notifications.begin());
+    }
+}
+
+void NotificationManager::update() {
+    // Remove expired notifications
+    notifications.erase(
+        std::remove_if(notifications.begin(), notifications.end(),
+            [](const Notification& n) { return n.isExpired(); }),
+        notifications.end()
+    );
+}
+
+color NotificationManager::getBackgroundColor(NotificationType type) const {
+    switch (type) {
+        case NotificationType::Success: return {30, 120, 60, 255};   // Dark green
+        case NotificationType::Warning: return {150, 120, 30, 255};  // Dark yellow/orange
+        case NotificationType::Error:   return {150, 40, 40, 255};   // Dark red
+        case NotificationType::Info:
+        default:                        return {40, 80, 120, 255};   // Dark blue
+    }
+}
+
+color NotificationManager::getForegroundColor(NotificationType type) const {
+    switch (type) {
+        case NotificationType::Success: return {150, 255, 180, 255}; // Light green
+        case NotificationType::Warning: return {255, 230, 150, 255}; // Light yellow
+        case NotificationType::Error:   return {255, 150, 150, 255}; // Light red
+        case NotificationType::Info:
+        default:                        return {180, 220, 255, 255}; // Light blue
+    }
+}
+
+void NotificationManager::render(TUImanager& tui) {
+    update(); // Remove expired notifications first
+    
+    if (notifications.empty()) return;
+    
+    // Save and set high z-index for notifications (above modals)
+    int prevZ = tui.getCurrentZ();
+    tui.setCurrentZ(200);
+    
+    // Render from top-right corner, stacking downward
+    int startX = tui.cols - notificationWidth - 2;
+    int startY = 1;
+    
+    int yOffset = 0;
+    for (const auto& notif : notifications) {
+        color bg = getBackgroundColor(notif.type);
+        color fg = getForegroundColor(notif.type);
+        
+        // Calculate height based on message length (wrap text)
+        int contentWidth = notificationWidth - 4;
+        int lines = 1 + (int)notif.message.size() / contentWidth;
+        int boxHeight = std::max(3, lines + 2);
+        
+        int x = startX;
+        int y = startY + yOffset;
+        
+        // Draw notification box
+        tui.drawBox(x, y, notificationWidth, boxHeight, fg, bg, bg);
+        
+        // Draw icon based on type
+        std::string icon;
+        switch (notif.type) {
+            case NotificationType::Success: icon = "✓"; break;
+            case NotificationType::Warning: icon = "⚠"; break;
+            case NotificationType::Error:   icon = "✗"; break;
+            case NotificationType::Info:
+            default:                        icon = "ℹ"; break;
+        }
+        tui.drawString(icon, fg, bg, x + 1, y + 1);
+        
+        // Draw message (with simple wrapping)
+        std::string msg = notif.message;
+        int msgY = y + 1;
+        int msgX = x + 3;
+        while (!msg.empty() && msgY < y + boxHeight - 1) {
+            std::string line = msg.substr(0, contentWidth);
+            if ((int)msg.size() > contentWidth) {
+                msg = msg.substr(contentWidth);
+            } else {
+                msg.clear();
+            }
+            tui.drawString(line, fg, bg, msgX, msgY);
+            msgY++;
+        }
+        
+        yOffset += boxHeight + 1;
+    }
+    
+    tui.setCurrentZ(prevZ);
 }
